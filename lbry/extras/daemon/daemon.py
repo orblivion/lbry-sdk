@@ -3617,11 +3617,11 @@ class Daemon(metaclass=JSONRPCServerType):
                 f"Can't find the stream '{claim_id}' in account(s) {account_ids}."
             )
         old_txo = existing_claims[0]
-        if not old_txo.claim.is_stream:
-            # TODO: use error from lbry.error
-            raise Exception(
-                f"A claim with id '{claim_id}' was found but it is not a stream claim."
-            )
+        # if not old_txo.claim.is_stream:
+        #     # TODO: use error from lbry.error
+        #     raise Exception(
+        #         f"A claim with id '{claim_id}' was found but it is not a stream claim."
+        #     )
 
         if bid is not None:
             amount = self.get_dewies_or_error('bid', bid, positive_value=True)
@@ -3651,28 +3651,32 @@ class Daemon(metaclass=JSONRPCServerType):
 
         if replace:
             claim = Claim()
-            if old_txo.claim.stream.has_source:
-                claim.stream.message.source.CopyFrom(
-                    old_txo.claim.stream.message.source
-                )
-            stream_type = old_txo.claim.stream.stream_type
-            if stream_type:
-                old_stream_type = getattr(old_txo.claim.stream.message, stream_type)
-                new_stream_type = getattr(claim.stream.message, stream_type)
-                new_stream_type.CopyFrom(old_stream_type)
-            claim.stream.update(file_path=file_path, **kwargs)
+            if old_txo.claim.is_stream:
+                if old_txo.claim.stream.has_source:
+                    claim.stream.message.source.CopyFrom(
+                        old_txo.claim.stream.message.source
+                    )
+                stream_type = old_txo.claim.stream.stream_type
+                if stream_type:
+                    old_stream_type = getattr(old_txo.claim.stream.message, stream_type)
+                    new_stream_type = getattr(claim.stream.message, stream_type)
+                    new_stream_type.CopyFrom(old_stream_type)
         else:
             claim = Claim.from_bytes(old_txo.claim.to_bytes())
+
+        if old_txo.claim.is_stream:
             claim.stream.update(file_path=file_path, **kwargs)
+
         if clear_channel:
             claim.clear_signature()
         tx = await Transaction.claim_update(
             old_txo, claim, amount, claim_address, funding_accounts, funding_accounts[0],
             channel if not clear_channel else None
         )
+
         new_txo = tx.outputs[0]
         stream_hash = None
-        if not preview:
+        if not preview and old_txo.claim.is_stream:
             old_stream = self.file_manager.get_filtered(sd_hash=old_txo.claim.stream.source.sd_hash)
             old_stream = old_stream[0] if old_stream else None
             if file_path is not None:
